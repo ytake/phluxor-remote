@@ -1,0 +1,12 @@
+parameters:
+  paths:
+    - src
+  excludePaths:
+    analyseAndScan:
+      - tests/
+      - src/Phluxor/Remote/ProtoBuf
+      - src/Phluxor/Remote/Metadata/ProtoBuf
+  level: max
+  treatPhpDocTypesAsCertain: false
+  scanDirectories:
+    - vendor/swoole/ide-helper

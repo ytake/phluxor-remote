@@ -1,0 +1,13 @@
+syntax = "proto3";
+package remote;
+
+option php_namespace = "Phluxor\\Remote\\WebSocket\\ProtoBuf";
+option php_metadata_namespace = "Phluxor\\Remote\\WebSocket\\Metadata\\ProtoBuf";
+
+import "message.proto";
+
+service Remoting {
+  rpc Receive (stream RemoteMessage) returns (stream RemoteMessage) {}
+  rpc ListProcesses(ListProcessesRequest) returns (ListProcessesResponse) {}
+  rpc GetProcessDiagnostics(GetProcessDiagnosticsRequest) returns (GetProcessDiagnosticsResponse) {}
+}
