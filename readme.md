@@ -28,7 +28,6 @@ use Phluxor\ActorSystem;
 use Phluxor\Remote\Config;
 use Phluxor\Remote\Kind;
 use Phluxor\Remote\Remote;
-use PHPUnit\Framework\TestCase;
 use Test\ProtoBuf\HelloRequest;
 use Test\ProtoBuf\HelloResponse;
 
@@ -66,7 +65,6 @@ use Phluxor\ActorSystem;
 use Phluxor\Remote\Config;
 use Phluxor\Remote\Kind;
 use Phluxor\Remote\Remote;
-use PHPUnit\Framework\TestCase;
 use Test\ProtoBuf\HelloRequest;
 use Test\ProtoBuf\HelloResponse;
 
