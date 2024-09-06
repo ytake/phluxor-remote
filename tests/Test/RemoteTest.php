@@ -4,13 +4,11 @@ declare(strict_types=1);
 
 namespace Test;
 
-use Monolog\Test\TestCase;
 use Phluxor\ActorSystem;
 use Phluxor\Remote\Config;
-use Phluxor\Remote\Endpoint\WebSocket\EndpointWriter;
 use Phluxor\Remote\Kind;
-use Phluxor\Remote\Message\EndpointConnectedEvent;
 use Phluxor\Remote\Remote;
+use PHPUnit\Framework\TestCase;
 use Test\ProtoBuf\HelloRequest;
 use Test\ProtoBuf\HelloResponse;
 
