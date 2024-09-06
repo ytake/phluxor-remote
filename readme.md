@@ -10,12 +10,18 @@ It is inspired by the [Proto.Remote](https://proto.actor/docs/remote/).
 
 with Phluxor Remote you can create a remote actor system that can communicate with other actor systems over network.
 
-## Usage
-
 Phluxor Remote uses [Swoole](https://www.swoole.com/).  
 
 Between the two nodes, use the `ProtoBuf` serialization format.  
 Websocket is used as the transport layer.  
+
+## Usage
+
+### Install
+
+```bash
+$ composer require phluxor/phluxor-remote
+```
 
 ### Node1
 
