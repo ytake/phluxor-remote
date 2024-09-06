@@ -10,8 +10,9 @@ use Phluxor\Remote\Config;
 use Phluxor\Remote\Endpoint\WebSocket\EndpointWriter;
 use Phluxor\Remote\Kind;
 use Phluxor\Remote\Message\EndpointConnectedEvent;
-use Phluxor\Remote\ProtoBuf\MessageBatch;
 use Phluxor\Remote\Remote;
+use Test\ProtoBuf\HelloRequest;
+use Test\ProtoBuf\HelloResponse;
 
 use function Swoole\Coroutine\run;
 
@@ -70,32 +71,43 @@ class RemoteTest extends TestCase
         run(function () {
             \Swoole\Coroutine\go(function () {
                 $system = ActorSystem::create();
+                $config = new Config('localhost', 50053, Config::withUseWebSocket(true));
+                $remote = new Remote($system, $config);
+                $remote->start();
+                $props = ActorSystem\Props::fromFunction(
+                    new ActorSystem\Message\ReceiveFunction(
+                        function (ActorSystem\Context\ContextInterface $context) {
+                            $message = $context->message();
+                            if ($message instanceof HelloRequest) {
+                                $context->respond(new HelloResponse([
+                                    'Message' => 'Hello from remote node',
+                                ]));
+                            }
+                        }
+                    )
+                );
+                $system->root()->spawnNamed($props, 'hello');
+                \Swoole\Coroutine::sleep(0.5);
+                $remote->shutdown();
+            });
+            \Swoole\Coroutine\go(function () {
+                $system = ActorSystem::create();
                 $config = new Config('localhost', 50052, Config::withUseWebSocket(true));
                 $remote = new Remote($system, $config);
                 $remote->start();
                 \Swoole\Coroutine::sleep(0.1);
-                $ref = $system->root()->spawn(
-                    ActorSystem\Props::fromProducer(
-                        fn() => new EndpointWriter(
-                            $config,
-                            'localhost',
-                            50052,
-                            false,
-                            $remote,
-                            $remote->getSerializerManager()
-                        )
-                    )
+                $future = $system->root()->requestFuture(
+                    new ActorSystem\Ref(new ActorSystem\ProtoBuf\Pid([
+                        'address' => 'localhost:50053',
+                        'id' => 'hello',
+                    ])),
+                    new HelloRequest(),
+                    1
                 );
-                $isProcess = false;
-                $system->getEventStream()?->subscribe(function ($msg) use (&$isProcess) {
-                    if ($msg instanceof EndpointConnectedEvent) {
-                        $isProcess = true;
-                    }
-                });
-                \Swoole\Coroutine::sleep(1);
-                $remote->shutdown(false);
-                $system->root()->stop($ref);
-                $this->assertTrue($isProcess);
+                $r = $future->result()->value();
+                $this->assertInstanceOf(HelloResponse::class, $r);
+                $this->assertSame('Hello from remote node', $r->getMessage());
+                $remote->shutdown();
             });
         });
     }

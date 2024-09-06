@@ -27,6 +27,7 @@ use Phluxor\ActorSystem\Ref;
 use Phluxor\ActorSystem\SupervisorInterface;
 use Phluxor\ActorSystem\SupervisorStrategyInterface;
 use Phluxor\Remote\Endpoint;
+use Phluxor\Remote\Endpoint\Grpc\EndpointWriterProducer;
 use Phluxor\Remote\Remote;
 use Phluxor\Remote\Serializer\SerializerManager;
 
@@ -96,7 +97,7 @@ readonly class EndpointSupervisor implements ActorInterface, SupervisorStrategyI
         string $address
     ): ActorSystem\Message\ProducerInterface {
         if ($this->useWebSocket) {
-            return new Endpoint\WebSocket\EndpointWriterProducer($remote, $remote->config, $this->serializerManager);
+            return new Endpoint\WebSocket\EndpointWriterProducer($remote, $address, $remote->config, $this->serializerManager);
         }
         return new EndpointWriterProducer($this->remote, $address, $this->remote->config, $this->serializerManager);
     }

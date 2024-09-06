@@ -36,6 +36,6 @@ readonly class RemoteHandler implements AddressResolverInterface
         if ($pid === null) {
             throw new \RuntimeException('Cannot resolve null pid');
         }
-        return new ProcessRegistryResult(new RemoteProcess($pid, $this->remote), true);
+        return new ProcessRegistryResult(new RemoteProcess($this->remote), true);
     }
 }

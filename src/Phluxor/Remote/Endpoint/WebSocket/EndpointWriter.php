@@ -1,5 +1,21 @@
 <?php
 
+/**
+ * Copyright 2024 Yuuki Takezawa <yuuki.takezawa@comnect.jp.net>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 declare(strict_types=1);
 
 namespace Phluxor\Remote\Endpoint\WebSocket;
@@ -33,24 +49,32 @@ use Phluxor\Remote\Serializer\SerializerManager;
 use Phluxor\Remote\WebSocket\ProtoBuf\RemotingClient;
 use Phluxor\WebSocket\Client;
 use Phluxor\WebSocket\ClientInterface;
+use Swoole\Coroutine\Channel;
 
 class EndpointWriter implements ActorInterface
 {
     private ?ClientInterface $connection = null;
     private ?RemotingClient $client = null;
+    private Channel $errorChannel;
 
     public function __construct(
-        private Config $config,
-        private string $host,
-        private int $port,
-        private bool $ssl,
-        private Remote $remote,
-        private SerializerManager $serializerManager
+        private readonly Config $config,
+        private readonly string $host,
+        private readonly int $port,
+        private readonly bool $ssl,
+        private readonly Remote $remote,
+        private readonly SerializerManager $serializerManager
     ) {
+        $this->errorChannel = new Channel(1);
+    }
+
+    private function address(): string
+    {
+        return sprintf("%s:%d", $this->host, $this->port);
     }
 
     /**
-     * @throws Exception
+     * @throws Exception|\Throwable
      */
     public function receive(ContextInterface $context): void
     {
@@ -62,28 +86,28 @@ class EndpointWriter implements ActorInterface
             case $message instanceof Stopped:
                 $this->remote->logger()->debug(
                     "WebSocket.EndpointWriter stopped",
-                    ["address" => $this->remote->actorSystem->address()]
+                    ["address" => $this->address()]
                 );
                 $this->closeClientConn();
                 break;
             case $message instanceof Restarting:
                 $this->remote->logger()->debug(
                     "WebSocket.EndpointWriter restarting",
-                    ["address" => $this->remote->actorSystem->address()]
+                    ["address" => $this->address()]
                 );
                 $this->closeClientConn();
                 break;
             case $message instanceof EndpointTerminatedEvent:
                 $this->remote->logger()->debug(
                     "WebSocket.EndpointWriter received EndpointTerminatedEvent, stopping actor",
-                    ["address" => $this->remote->actorSystem->address()]
+                    ["address" => $this->address()]
                 );
                 $context->stop($context->self());
                 break;
             case $message instanceof RestartAfterConnectFailure:
                 $this->remote->logger()->debug(
                     "WebSocket.EndpointWriter initiating self-restart after failing to connect and a delay",
-                    ["address" => $this->remote->actorSystem->address()]
+                    ["address" => $this->address()]
                 );
                 break;
             case $this->isDefinedMessage($message):
@@ -96,7 +120,7 @@ class EndpointWriter implements ActorInterface
                 $this->remote->logger()->error(
                     "WebSocket.EndpointWriter got invalid message",
                     [
-                        "fromAddress" => $this->remote->actorSystem->address(),
+                        "fromAddress" => $this->address(),
                         'type' => $message,
                     ]
                 );
@@ -107,7 +131,7 @@ class EndpointWriter implements ActorInterface
     {
         $this->remote->logger()->info(
             "WebSocket.EndpointWriter closing connection",
-            ["address" => $this->remote->actorSystem->address()]
+            ["address" => $this->address()]
         );
         if ($this->connection !== null) {
             $this->connection->close();
@@ -126,6 +150,13 @@ class EndpointWriter implements ActorInterface
      */
     private function sendEnvelope(array $message, ContextInterface $context): void
     {
+        if ($this->client === null) {
+            $this->remote->logger()->error(
+                "WebSocket.EndpointWriter failed to send message, no client",
+                ["address" => $this->address()]
+            );
+            return;
+        }
         $envelopes = [];
         $typeNames = [];
         $typeNamesArr = [];
@@ -140,7 +171,7 @@ class EndpointWriter implements ActorInterface
                 $this->remote->logger()->debug(
                     "Handling array wrapped terminate event",
                     [
-                        'address' => $this->remote->actorSystem->address(),
+                        'address' => $this->address(),
                         'message' => $tmp
                     ]
                 );
@@ -175,7 +206,7 @@ class EndpointWriter implements ActorInterface
                     $message = $message->serialize();
                 } catch (\Exception $err) {
                     $this->remote->logger()->error("EndpointWriter failed to serialize message", [
-                        'address' => $this->remote->actorSystem->address(),
+                        'address' => $this->address(),
                         'error' => $err,
                         'message' => $message
                     ]);
@@ -185,17 +216,34 @@ class EndpointWriter implements ActorInterface
             $serialized = $this->serializerManager->serialize($message, $serializerId);
             if ($serialized->exception !== null) {
                 $this->remote->logger()->error("EndpointWriter failed to serialize message", [
-                    'address' => $this->remote->actorSystem->address(),
+                    'address' => $this->address(),
                     'error' => $serialized->exception,
+                    'message' => $message
+                ]);
+                continue;
+            }
+            if ($rd === null) {
+                $this->remote->logger()->error("EndpointWriter failed to send message, no RemoteDeliver", [
+                    'address' => $this->address(),
+                    'message' => $message
+                ]);
+                continue;
+            }
+            if ($rd->target === null) {
+                $this->remote->logger()->error("EndpointWriter failed to send message, no target", [
+                    'address' => $this->address(),
                     'message' => $message
                 ]);
                 continue;
             }
             $serializedResult = $serialized->typeNameResult;
             $lookupResult = $this->addToLookup($typeNames, $serializedResult->name, $typeNamesArr);
+            $typeNamesArr = array_merge($typeNamesArr, $lookupResult['lookup']);
             $targetLookupResult = $this->addToTargetLookup($targetNames, $rd->target->protobufPid(), $targetNamesArr);
+            $targetNamesArr = array_merge($targetNamesArr, $targetLookupResult['lookup']);
             $targetRequestId = $rd->target->protobufPid()->getRequestId();
-            $senderLookupResult = $this->addToSenderLookup($senderNames, $rd->sender->protobufPid(), $senderNamesArr);
+            $senderLookupResult = $this->addToSenderLookup($senderNames, $rd->sender?->protobufPid(), $senderNamesArr);
+            $senderNamesArr = array_merge($senderNamesArr, $senderLookupResult['lookup']);
             $senderRequestId = $rd->sender !== null ? $rd->sender->protobufPid()->getRequestId() : 0;
             $envelopes[] = new MessageEnvelope([
                 'message_header' => $header,
@@ -208,36 +256,40 @@ class EndpointWriter implements ActorInterface
                 'sender_request_id' => $senderRequestId
             ]);
         }
-
         if (count($envelopes) === 0) {
             return;
         }
         $rm = new RemoteMessage();
         $mb = new MessageBatch();
-        $mb->setTypeNames($typeNamesArr)->setTargets($targetNamesArr)->setSenders($senderNamesArr)->setEnvelopes(
-            $envelopes
-        );
+        $mb->setTypeNames($typeNamesArr)
+            ->setTargets($targetNamesArr)
+            ->setSenders($senderNamesArr)
+            ->setEnvelopes($envelopes);
         try {
             $this->client->Receive($rm->setMessageBatch($mb));
         } catch (\Throwable $err) {
             $context->stash();
-            $this->remote->logger()->error("EndpointWriter failed to send message", [
-                'address' => $this->remote->actorSystem->address(),
-                'error' => $err,
-                'message' => $message
-            ]);
+            $this->remote->logger()->error(
+                sprintf("EndpointWriter failed to send message: %s", $err->getMessage()),
+                [
+                    'address' => $this->address(),
+                    'error' => $err,
+                    'message' => $message
+                ]
+            );
             $context->stop($context->self());
         }
     }
 
     /**
      * @throws Exception
+     * @throws \Throwable
      */
     private function initialize(): void
     {
         $this->remote->logger()->info(
             "Started WebSocket.EndpointWriter. connecting",
-            ["address" => $this->remote->actorSystem->address()]
+            ["address" => $this->address()]
         );
         $retry = $this->config->getMaxRetryCount();
         for ($i = 0; $i < $retry; $i++) {
@@ -249,17 +301,25 @@ class EndpointWriter implements ActorInterface
                     $this->remote->logger()->error(
                         "WebSocket.EndpointWriter failed to connect after max retry count",
                         [
-                            "address" => $this->remote->actorSystem->address(),
+                            "address" => $this->address(),
                             'error' => $e->getMessage(),
                         ]
                     );
-                    throw $e;
+                    \Swoole\Coroutine::sleep(2);
+                    continue;
                 }
             }
         }
+        $e = $this->errorChannel->pop(0.1);
+        if ($e instanceof \Throwable) {
+            $this->remote->actorSystem->getEventStream()?->publish(
+                new EndpointTerminatedEvent($this->address())
+            );
+            throw $e;
+        }
         $this->remote->logger()->info(
             "WebSocket.EndpointWriter connected",
-            ["address" => $this->remote->actorSystem->address()]
+            ["address" => $this->address()]
         );
     }
 
@@ -278,13 +338,19 @@ class EndpointWriter implements ActorInterface
                 'Address' => $this->remote->actorSystem->address(),
             ])));
             while (true) {
-                if ($this->client === null) {
+                if (!$this->client instanceof RemotingClient) {
                     $this->remote->logger()->error(
                         "WebSocket.EndpointWriter failed to create client",
-                        ["fromAddress" => $this->remote->actorSystem->address()]
+                        ["fromAddress" => $this->address()]
                     );
+                    continue;
                 }
-                $receive = $this->client->Receive($rm);
+                try {
+                    $receive = $this->client->Receive($rm);
+                } catch (\Throwable $err) {
+                    $this->errorChannel->push($err);
+                    break;
+                }
                 if ($receive === null) {
                     continue;
                 }
@@ -292,14 +358,14 @@ class EndpointWriter implements ActorInterface
                     case $receive->hasConnectResponse():
                         $this->remote->logger()->debug(
                             "Received connect response",
-                            ["fromAddress" => $this->remote->actorSystem->address()]
+                            ["fromAddress" => $this->address()]
                         );
                         break;
                     default:
                         $this->remote->logger()->error(
                             "WebSocket.EndpointWriter got invalid connect response",
                             [
-                                "fromAddress" => $this->remote->actorSystem->address(),
+                                "fromAddress" => $this->address(),
                                 'type' => $receive->getMessageType(),
                             ]
                         );
@@ -308,7 +374,7 @@ class EndpointWriter implements ActorInterface
                 break;
             }
         });
-        $connected = new EndpointConnectedEvent($this->remote->actorSystem->address());
+        $connected = new EndpointConnectedEvent($this->address());
         $this->remote->actorSystem->getEventStream()?->publish($connected);
     }
 

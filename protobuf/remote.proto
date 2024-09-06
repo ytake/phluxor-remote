@@ -1,6 +1,6 @@
 syntax = "proto3";
 package remote;
-
+/*
 option php_namespace = "Phluxor\\Remote\\ProtoBuf";
 option php_metadata_namespace = "Phluxor\\Remote\\Metadata\\ProtoBuf";
 
@@ -100,3 +100,4 @@ message GetProcessDiagnosticsRequest {
 message GetProcessDiagnosticsResponse {
   string diagnostics_string= 1;
 }
+*/

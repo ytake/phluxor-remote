@@ -50,19 +50,18 @@ class RemotingService implements RemotingInterface
 
     /**
      * @param WebSocket\ContextInterface $ctx
-     * @param RemoteMessage $request
+     * @param WebSocket\Stream $stream
      * @return void
      *
      * @throws WebSocket\Exception\InvokeException
-     * @throws \Swoole\Exception
+     * @throws \Swoole\Exception|Exception
      */
-    public function Receive(WebSocket\ContextInterface $ctx, RemoteMessage $request): void // @phpcs:ignore
-    {
+    public function Receive( // @phpcs:ignore
+        WebSocket\ContextInterface $ctx,
+        WebSocket\Stream $stream
+    ): void {
         $disconnectChannel = new \Swoole\Coroutine\Channel(1);
         $edpm = $this->remote->getEndpointManager();
-        if ($edpm === null) {
-            throw new \RuntimeException('EndpointManager not found');
-        }
         if ($edpm->getEndpointReaderConnections() === null) {
             throw new \RuntimeException('EndpointReaderConnections not found');
         }
@@ -85,51 +84,53 @@ class RemotingService implements RemotingInterface
                 }
             });
             while (true) {
-                $message = $request;
-                if ($this->suspend->pop(0.1)) {
+                $message = $stream->recv();
+                if ($this->suspend->pop(0.01)) {
                     break;
+                }
+                if (!$message instanceof RemoteMessage) {
+                    continue;
                 }
                 if ($message->getMessageType() === '') {
                     continue;
                 }
-                if ($message instanceof RemoteMessage) {
-                    switch (true) {
-                        case $message->hasConnectRequest():
-                            $this->remote->logger()->debug(
-                                "RemotingService received connect request",
-                                ['message' => $message]
+                switch (true) {
+                    case $message->hasConnectRequest():
+                        $this->remote->logger()->debug(
+                            "RemotingService received connect request",
+                            ['message' => $message]
+                        );
+                        if ($message->getConnectRequest() === null) {
+                            $this->remote->logger()->error("RemotingService received null message connect request");
+                            break;
+                        }
+                        $err = $this->onConnectRequest($ctx, $writer, $message->getConnectRequest());
+                        if (!$err) {
+                            $this->remote->logger()->error("RemotingService failed to handle connect request");
+                            break;
+                        }
+                        break;
+                    case $message->hasMessageBatch():
+                        if ($message->getMessageBatch() === null) {
+                            $this->remote->logger()->error("RemotingService received null message batch");
+                            break;
+                        }
+                        $err = $this->onMessageBatch($message->getMessageBatch());
+                        if (!$err) {
+                            $this->remote->logger()->error(
+                                "RemotingService failed to handle message batch"
                             );
-                            if ($message->getConnectRequest() === null) {
-                                $this->remote->logger()->error("RemotingService received null message connect request");
-                                break;
-                            }
-                            $err = $this->onConnectRequest($ctx, $writer, $message->getConnectRequest());
-                            if (!$err) {
-                                $this->remote->logger()->error("RemotingService failed to handle connect request");
-                                break;
-                            }
                             break;
-                        case $message->hasMessageBatch():
-                            if ($message->getMessageBatch() === null) {
-                                $this->remote->logger()->error("RemotingService received null message batch");
-                                break;
-                            }
-                            $err = $this->onMessageBatch($message->getMessageBatch());
-                            if (!$err) {
-                                $this->remote->logger()->error(
-                                    "RemotingService failed to handle message batch"
-                                );
-                                break;
-                            }
-                            break;
-                        default:
-                            $this->remote->logger()->notice("RemotingService received unknown message type");
-                    }
+                        }
+                        break;
+                    default:
+                        $this->remote->logger()->notice("RemotingService received unknown message type");
                 }
                 \Swoole\Coroutine::sleep(0.01);
             }
         } finally {
             $disconnectChannel->close();
+            $this->suspend->close();
         }
     }
 
@@ -211,7 +212,7 @@ class RemotingService implements RemotingInterface
             }
             switch (true) {
                 case $message instanceof Terminated:
-                    $this->remote->getEndpointManager()?->remoteTerminate(
+                    $this->remote->getEndpointManager()->remoteTerminate(
                         new RemoteTerminate($message->getWho(), $target) // @phpstan-ignore-line
                     );
                     break;
@@ -230,14 +231,13 @@ class RemotingService implements RemotingInterface
                             break;
                         }
                     }
-
                     if ($envelope->getMessageHeader() != null) {
                         $header = $envelope->getMessageHeader()->getHeaderData();
                     }
                     $localEnvelope = new \Phluxor\ActorSystem\Message\MessageEnvelope(
                         new MessageHeader($header), // @phpstan-ignore-line
                         $message,
-                        new Ref($target),
+                        new Ref($sender),
                     );
                     $this->remote->actorSystem->root()->send(new Ref($target), $localEnvelope);
                     break;
@@ -253,11 +253,10 @@ class RemotingService implements RemotingInterface
      *
      * @throws WebSocket\Exception\InvokeException
      */
-    public function ListProcesses(
+    public function ListProcesses( // @phpcs:ignore
         WebSocket\ContextInterface $ctx,
         ListProcessesRequest $request
-    ): ListProcessesResponse // @phpcs:ignore
-    {
+    ): ListProcessesResponse {
         throw new BadMethodCallException('Method not implemented');
     }
 
@@ -268,11 +267,10 @@ class RemotingService implements RemotingInterface
      *
      * @throws WebSocket\Exception\InvokeException
      */
-    public function GetProcessDiagnostics(
+    public function GetProcessDiagnostics( // @phpcs:ignore
         WebSocket\ContextInterface $ctx,
         GetProcessDiagnosticsRequest $request
-    ): GetProcessDiagnosticsResponse // @phpcs:ignore
-    {
+    ): GetProcessDiagnosticsResponse {
         // your code
         throw new BadMethodCallException('Method not implemented');
     }
@@ -293,6 +291,9 @@ class RemotingService implements RemotingInterface
         if ($index === 0) {
             $pid = null;
         } else {
+            if (!isset($arr[$index - 1])) {
+                return null;
+            }
             /** @var Pid $pid */
             $pid = $arr[$index - 1];
             if ($requestId > 0) {
@@ -318,6 +319,9 @@ class RemotingService implements RemotingInterface
         int $requestId,
         RepeatedField $arr
     ): ?Pid {
+        if (!isset($arr[$index])) {
+            return null;
+        }
         /** @var Pid $pid */
         $pid = $arr[$index];
         // if request id is used.

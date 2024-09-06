@@ -21,8 +21,8 @@ declare(strict_types=1);
 namespace Phluxor\Remote;
 
 use Exception;
+use Phluxor\WebSocket\RequestHandlerInterface;
 use Phluxor\WebSocket\Server;
-use Phluxor\WebSocket\ServiceInterface;
 use Psr\Log\LoggerInterface;
 
 readonly class WebSocketServer
@@ -50,9 +50,9 @@ readonly class WebSocketServer
     /**
      * @throws Exception
      */
-    public function registerHandler(ServiceInterface $instance): self
+    public function registerHandler(string $name, RequestHandlerInterface $handler): self
     {
-        $this->server->registerService($instance);
+        $this->server->registerService($name, $handler);
         return $this;
     }
 }

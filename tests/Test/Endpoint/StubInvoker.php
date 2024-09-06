@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Test\Remote\Endpoint;
+namespace Test\Endpoint;
 
 use Closure;
 use Phluxor\ActorSystem\Mailbox\MessageInvokerInterface;

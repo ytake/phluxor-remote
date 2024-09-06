@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Test\Remote\Endpoint;
+namespace Test\Endpoint;
 
 use Phluxor\ActorSystem\Dispatcher\CoroutineDispatcher;
-use Phluxor\Remote\Endpoint\EndpointWriterMailbox;
-use PHPUnit\Framework\TestCase;
 use Phluxor\Buffer\Queue as RingBufferQueue;
 use Phluxor\Mspc\Queue as MpscQueue;
+use Phluxor\Remote\Endpoint\EndpointWriterMailbox;
+use PHPUnit\Framework\TestCase;
 use Swoole\Coroutine\WaitGroup;
 
 use function Swoole\Coroutine\run;

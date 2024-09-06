@@ -111,6 +111,7 @@ class EndpointManager
                 ["error" => $stoppedActivator->getMessage()]
             );
         }
+
         $stoppedSupervisor = $this->stopSupervisor();
         if ($stoppedSupervisor != null) {
             $this->remote->logger()->error(

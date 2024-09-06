@@ -19,9 +19,9 @@
   "description": "remoting library for phluxor / actor model",
   "require": {
     "php": "^8.3",
-    "google/protobuf": "^3.25.3",
+    "google/protobuf": "3.25.4",
     "phluxor/phluxor": "^0.1.9",
-    "phluxor/phluxor-websocket": "^0.1.2"
+    "phluxor/phluxor-websocket": "^0.1.3"
   },
   "require-dev": {
     "phpunit/phpunit": "^10.5.11",

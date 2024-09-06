@@ -96,7 +96,7 @@ class Config
             $config->useWebSocket = $useWebSocket;
         };
     }
-    
+
     public function getEndpointWriterBatchSize(): int
     {
         return $this->endpointWriterBatchSize;

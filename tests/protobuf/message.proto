@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package protobuf;
+
+option php_namespace = "Test\\ProtoBuf";
+option php_metadata_namespace = "Test\\Metadata";
+
+message HelloRequest {}
+message HelloResponse {
+  string Message = 1;
+}

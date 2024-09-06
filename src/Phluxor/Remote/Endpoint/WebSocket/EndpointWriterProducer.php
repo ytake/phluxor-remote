@@ -14,6 +14,7 @@ readonly class EndpointWriterProducer implements ProducerInterface
 {
     public function __construct(
         private Remote $remote,
+        private string $address,
         private Config $config,
         private SerializerManager $serializerManager
     ) {
@@ -21,10 +22,11 @@ readonly class EndpointWriterProducer implements ProducerInterface
 
     public function __invoke(): ActorInterface
     {
+        [$host, $port] = explode(':', $this->address);
         return new EndpointWriter(
             $this->config,
-            $this->config->host,
-            $this->config->port,
+            $host,
+            (int) $port,
             $this->config->isSsl(),
             $this->remote,
             $this->serializerManager

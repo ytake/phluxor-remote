@@ -6,13 +6,5 @@ It generates code in the target language of your choice from a `.proto` file.
 ## Usage
 
 ```bash
-# project root
-$ cd ../
-# generate PHP code$ protoc -I=./vendor/phluxor/phluxor/protobuf/ --proto_path=protobuf  --php_out=src protobuf/message.proto
+$ protoc --proto_path=protobuf --php_out=:./ protobuf/message.proto
 ```
-
-## Notes
-
-https://github.com/grpc/grpc/issues/31408
-
-[Bazel MacOS](https://bazel.build/install/os-x?hl=en)

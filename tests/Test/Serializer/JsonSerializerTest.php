@@ -20,6 +20,9 @@ class JsonSerializerTest extends TestCase
         $this->assertInstanceOf(SerializerException::class, $serialized->exception);
     }
 
+    /**
+     * @throws \Throwable
+     */
     public function testShouldBeAbleToSerializeJsonMessage(): void
     {
         $serializer = new JsonSerializer();
@@ -32,6 +35,9 @@ class JsonSerializerTest extends TestCase
         $this->assertSame([1, 2, 3], json_decode($deserialized->json));
     }
 
+    /**
+     * @throws \Throwable
+     */
     public function testShouldReturnProtoBufMessage(): void
     {
         $serializer = new JsonSerializer();

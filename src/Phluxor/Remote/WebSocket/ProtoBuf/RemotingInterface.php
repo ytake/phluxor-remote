@@ -20,12 +20,15 @@ interface RemotingInterface extends WebSocket\ServiceInterface
 
     /**
      * @param WebSocket\ContextInterface $ctx
-     * @param RemoteMessage $request
+     * @param WebSocket\Stream $stream
      * @return void
      *
      * @throws WebSocket\Exception\InvokeException
      */
-    public function Receive(WebSocket\ContextInterface $ctx, RemoteMessage $request): void; // @phpcs:ignore
+    public function Receive( // @phpcs:ignore
+        WebSocket\ContextInterface $ctx,
+        WebSocket\Stream $stream
+    ): void;
 
     /**
      * @param WebSocket\ContextInterface $ctx
@@ -34,10 +37,10 @@ interface RemotingInterface extends WebSocket\ServiceInterface
      *
      * @throws WebSocket\Exception\InvokeException
      */
-    public function ListProcesses(
+    public function ListProcesses( // @phpcs:ignore
         WebSocket\ContextInterface $ctx,
         ListProcessesRequest $request
-    ): ListProcessesResponse; // @phpcs:ignore
+    ): ListProcessesResponse;
 
     /**
      * @param WebSocket\ContextInterface $ctx
@@ -46,8 +49,8 @@ interface RemotingInterface extends WebSocket\ServiceInterface
      *
      * @throws WebSocket\Exception\InvokeException
      */
-    public function GetProcessDiagnostics(
+    public function GetProcessDiagnostics( // @phpcs:ignore
         WebSocket\ContextInterface $ctx,
         GetProcessDiagnosticsRequest $request
-    ): GetProcessDiagnosticsResponse; // @phpcs:ignore
+    ): GetProcessDiagnosticsResponse;
 }

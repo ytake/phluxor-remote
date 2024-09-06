@@ -29,6 +29,7 @@ use Phluxor\ActorSystem\Message\ReceiveFunction;
 use Phluxor\ActorSystem\Message\Started;
 use Phluxor\ActorSystem\ProtoBuf\Terminated;
 use Phluxor\ActorSystem\ProtoBuf\TerminatedReason;
+use Phluxor\ActorSystem\ProtoBuf\Unwatch;
 use Phluxor\ActorSystem\ProtoBuf\Watch;
 use Phluxor\ActorSystem\Ref;
 use Phluxor\ActorSystem\RefSet;
@@ -47,8 +48,8 @@ class EndpointWatcher implements ActorInterface
     private array $watched = [];
 
     public function __construct(
-        private string $address,
-        private Remote $remote,
+        private readonly string $address,
+        private readonly Remote $remote,
     ) {
         $this->behavior = new Behavior();
         $this->behavior->become(
@@ -111,15 +112,40 @@ class EndpointWatcher implements ActorInterface
                 $context->stop($context->self());
                 break;
             case $message instanceof RemoteWatch:
-                if (isset($this->watched[(string)$message->watcher])) {
-                    $this->watched[(string)$message->watcher]->add($message->watchee);
+                if (isset($this->watched[$message->watcher->getId()])) {
+                    $this->watched[$message->watcher->getId()]
+                        ->add(new Ref($message->watchee));
                 } else {
-                    $this->watched[(string)$message->watcher] = new RefSet($message->watchee);
+                    $this->watched[$message->watcher->getId()] = new RefSet(new Ref($message->watchee));
                 }
                 $watch = new Watch([
                     'watcher' => $message->watcher,
                 ]);
-                $this->remote->sendMessage($message->watchee, null, $watch, null, -1);
+                $this->remote->sendMessage(
+                    new Ref($message->watchee),
+                    null,
+                    $watch,
+                    null,
+                    -1
+                );
+                break;
+            case $message instanceof RemoteUnwatch:
+                if (isset($this->watched[$message->watcher->getId()])) {
+                    $refSet = $this->watched[$message->watcher->getId()];
+                    $refSet->remove(new Ref($message->watchee));
+                    if ($refSet->len() === 0) {
+                        unset($this->watched[$message->watcher->getId()]);
+                    }
+                }
+                $this->remote->sendMessage(
+                    new Ref($message->watchee),
+                    null,
+                    new Unwatch([
+                        'watcher' => $message->watcher,
+                    ]),
+                    null,
+                    -1
+                );
                 break;
             default:
                 $this->remote->logger()->error(
@@ -150,13 +176,18 @@ class EndpointWatcher implements ActorInterface
         $message = $context->message();
         switch (true) {
             case $message instanceof RemoteWatch:
-                $result = $this->remote->actorSystem->getProcessRegistry()->getLocal((string)$message->watcher);
+                $result = $this->remote->actorSystem->getProcessRegistry()->getLocal(
+                    $message->watcher->getId()
+                );
                 if ($result->isProcess()) {
                     $terminated = new Terminated([
                         'who' => $message->watchee,
                         'why' => TerminatedReason::AddressTerminated,
                     ]);
-                    $result->getProcess()->sendSystemMessage($message->watcher, $terminated);
+                    $result->getProcess()->sendSystemMessage(
+                        new Ref($message->watcher),
+                        $terminated
+                    );
                 }
                 break;
             case $message instanceof RemoteTerminate:

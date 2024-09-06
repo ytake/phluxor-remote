@@ -29,6 +29,7 @@ use Phluxor\Remote\ProtoBuf\ActorPidRequest;
 use Phluxor\Remote\ProtoBuf\ActorPidResponse;
 use Phluxor\Remote\Serializer\SerializerManager;
 use Phluxor\Remote\WebSocket\ProtoBuf\RemotingService;
+use Phluxor\Remote\WebSocket\ServiceContainer;
 use Phluxor\Value\ContextExtensionId;
 use Phluxor\Value\ExtensionInterface;
 use Psr\Log\LoggerInterface;
@@ -43,7 +44,6 @@ class Remote implements ExtensionInterface
     private ?RemotingService $endpointReader = null;
     private ?WebSocketServer $server = null;
     private SerializerManager $serializerManager;
-    private Channel $shutdownChannel;
 
     /** @var array<string, Props> */
     private array $kinds = [];
@@ -59,7 +59,6 @@ class Remote implements ExtensionInterface
         }
         $this->actorSystem->extensions()->set($this);
         $this->serializerManager = new SerializerManager();
-        $this->shutdownChannel = new Channel(1);
     }
 
     public function extensionID(): ContextExtensionId
@@ -114,21 +113,21 @@ class Remote implements ExtensionInterface
             $this->config->port
         );
         $this->endpointReader = new RemotingService($this, $this->serializerManager);
-        $this->server->registerHandler($this->endpointReader);
+        $service = new ServiceContainer($this->endpointReader);
+        $this->server->registerHandler($service->name, $service);
         $this->logger()->info("Starting Phluxor remote server", ["address" => $address]);
         \Swoole\Coroutine\go(function () {
             $this->server?->run();
         });
     }
 
-    public function shutdown(bool $graceful): void
+    public function shutdown(bool $graceful = false): void
     {
         if ($graceful) {
             $this->endpointReader?->suspend(true);
             $this->endpointManager?->stop();
             $c = new Channel(1);
             $result = $c->pop(10);
-            $this->shutdownChannel->push(true);
             if ($result) {
                 $this->logger()->info("Stopped Phluxor server");
             } else {
@@ -139,7 +138,6 @@ class Remote implements ExtensionInterface
         } else {
             $this->endpointReader?->suspend(true);
             $this->endpointManager?->stop();
-            $this->shutdownChannel->push(true);
             $this->server?->stop();
             $this->logger()->info("Killed Phluxor server");
         }
@@ -248,8 +246,11 @@ class Remote implements ExtensionInterface
         };
     }
 
-    public function getEndpointManager(): ?EndpointManager
+    public function getEndpointManager(): EndpointManager
     {
+        if ($this->endpointManager == null) {
+            throw new RuntimeException("EndpointManager is not started");
+        }
         return $this->endpointManager;
     }
 
