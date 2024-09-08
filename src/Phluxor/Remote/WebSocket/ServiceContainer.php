@@ -33,16 +33,20 @@ use TypeError;
 
 final readonly class ServiceContainer implements RequestHandlerInterface
 {
-    public string $name;
+    private string $name;
 
     /**
      * @param ServiceInterface $service
-     * @throws Exception
      */
     public function __construct(
         private ServiceInterface $service
     ) {
         $this->name = $service::NAME;
+    }
+
+    public function getName(): string
+    {
+        return $this->name;
     }
 
     /**

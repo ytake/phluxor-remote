@@ -114,7 +114,7 @@ class Remote implements ExtensionInterface
         );
         $this->endpointReader = new RemotingService($this, $this->serializerManager);
         $service = new ServiceContainer($this->endpointReader);
-        $this->server->registerHandler($service->name, $service);
+        $this->server->registerHandler($service->getName(), $service);
         $this->logger()->info("Starting Phluxor remote server", ["address" => $address]);
         \Swoole\Coroutine\go(function () {
             $this->server?->run();

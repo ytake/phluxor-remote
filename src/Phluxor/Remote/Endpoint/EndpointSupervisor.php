@@ -27,7 +27,7 @@ use Phluxor\ActorSystem\Ref;
 use Phluxor\ActorSystem\SupervisorInterface;
 use Phluxor\ActorSystem\SupervisorStrategyInterface;
 use Phluxor\Remote\Endpoint;
-use Phluxor\Remote\Endpoint\Grpc\EndpointWriterProducer;
+use Phluxor\Remote\Message\EndpointStop;
 use Phluxor\Remote\Remote;
 use Phluxor\Remote\Serializer\SerializerManager;
 
@@ -57,6 +57,12 @@ readonly class EndpointSupervisor implements ActorInterface, SupervisorStrategyI
                 ['ewr' => (string)$endpoint->writer, 'ewa' => (string)$endpoint->watcher]
             );
             $context->respond($endpoint);
+        }
+        if ($message instanceof EndpointStop) {
+            $context->logger()->debug("EndpointSupervisor stopping children");
+            foreach ($context->children() as $child) {
+                $context->stop($child);
+            }
         }
     }
 
@@ -99,7 +105,7 @@ readonly class EndpointSupervisor implements ActorInterface, SupervisorStrategyI
         if ($this->useWebSocket) {
             return new Endpoint\WebSocket\EndpointWriterProducer($remote, $address, $remote->config, $this->serializerManager);
         }
-        return new EndpointWriterProducer($this->remote, $address, $this->remote->config, $this->serializerManager);
+        throw new \RuntimeException('now support only WebSocket');
     }
 
     private function spawnEndpointWatcher(

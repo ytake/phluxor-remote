@@ -128,6 +128,8 @@ class RemotingService implements RemotingInterface
                 }
                 \Swoole\Coroutine::sleep(0.01);
             }
+        } catch (WebSocket\Exception\ConnectionClosedException $e) {
+            $this->remote->logger()->info('RemotingService WebSocket connection closed');
         } finally {
             $disconnectChannel->close();
             $this->suspend->close();

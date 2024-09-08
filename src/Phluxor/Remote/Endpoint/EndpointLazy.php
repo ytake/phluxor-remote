@@ -40,9 +40,8 @@ class EndpointLazy
     {
         $system = $this->manager->getRemote()->actorSystem;
         $system->getLogger()->debug("connecting to remote address", ["address" => $this->address]);
-        $em = $this->manager;
         $rst = $system->root()->requestFuture(
-            $em->getEndpointSupervisor(),
+            $this->manager->getEndpointSupervisor(),
             $this->address,
             -1
         )->result();

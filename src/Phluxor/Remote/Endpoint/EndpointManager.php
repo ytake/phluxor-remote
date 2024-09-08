@@ -31,6 +31,7 @@ use Phluxor\Remote\ActivateActor;
 use Phluxor\Remote\ConcurrentMap;
 use Phluxor\Remote\Endpoint;
 use Phluxor\Remote\Message\EndpointConnectedEvent;
+use Phluxor\Remote\Message\EndpointStop;
 use Phluxor\Remote\Message\EndpointTerminatedEvent;
 use Phluxor\Remote\Message\Ping;
 use Phluxor\Remote\Message\RemoteDeliver;
@@ -121,20 +122,18 @@ class EndpointManager
         }
         $this->endpointSub = null;
         $this->connections = null;
-        if ($this->endpointReaderConnections != null) {
-            $this->endpointReaderConnections->range(function (mixed $key, mixed $value): bool {
-                if ($value instanceof Channel) {
-                    $channel = $value;
-                    $channel->push(true);
-                    if (is_string($key)) {
-                        $this->endpointReaderConnections?->delete($key);
-                        return true;
-                    }
-                    return false;
+        $this->endpointReaderConnections?->range(function (mixed $key, mixed $value): bool {
+            if ($value instanceof Channel) {
+                $channel = $value;
+                $channel->push(true);
+                if (is_string($key)) {
+                    $this->endpointReaderConnections?->delete($key);
+                    return true;
                 }
                 return false;
-            });
-        }
+            }
+            return false;
+        });
     }
 
     private function startActivator(): void
