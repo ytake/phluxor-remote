@@ -84,10 +84,11 @@ class RemotingService implements RemotingInterface
                 }
             });
             while (true) {
-                $message = $stream->recv();
                 if ($this->suspend->pop(0.01)) {
+                    $stream->close();
                     break;
                 }
+                $message = $stream->recv();
                 if (!$message instanceof RemoteMessage) {
                     continue;
                 }
@@ -126,7 +127,7 @@ class RemotingService implements RemotingInterface
                     default:
                         $this->remote->logger()->notice("RemotingService received unknown message type");
                 }
-                \Swoole\Coroutine::sleep(0.01);
+                \Swoole\Coroutine::sleep(0.1);
             }
         } catch (WebSocket\Exception\ConnectionClosedException $e) {
             $this->remote->logger()->info('RemotingService WebSocket connection closed');
