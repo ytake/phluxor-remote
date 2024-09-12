@@ -85,7 +85,7 @@ class RemoteTest extends TestCase
                     )
                 );
                 $system->root()->spawnNamed($props, 'hello');
-                \Swoole\Coroutine::sleep(0.5);
+                \Swoole\Coroutine::sleep(2);
                 $remote->shutdown();
             });
             \Swoole\Coroutine\go(function () {
@@ -105,6 +105,17 @@ class RemoteTest extends TestCase
                 $r = $future->result()->value();
                 $this->assertInstanceOf(HelloResponse::class, $r);
                 $this->assertSame('Hello from remote node', $r->getMessage());
+
+                $future = $system->root()->requestFuture(
+                    new ActorSystem\Ref(new ActorSystem\ProtoBuf\Pid([
+                        'address' => 'localhost:50053',
+                        'id' => 'hello',
+                    ])),
+                    new HelloRequest(),
+                    1
+                );
+                $r = $future->result()->value();
+                $this->assertInstanceOf(HelloResponse::class, $r);
                 $remote->shutdown();
             });
         });

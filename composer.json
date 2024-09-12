@@ -21,7 +21,7 @@
     "php": "^8.3",
     "google/protobuf": "3.25.4",
     "phluxor/phluxor": "^0.1.10",
-    "phluxor/phluxor-websocket": "^0.1.4"
+    "phluxor/phluxor-websocket": "^0.1.5"
   },
   "require-dev": {
     "phpunit/phpunit": "^10.5.11",

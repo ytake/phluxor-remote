@@ -27,16 +27,20 @@ use Phluxor\ActorSystem\Ref;
 use Phluxor\ActorSystem\SupervisorInterface;
 use Phluxor\ActorSystem\SupervisorStrategyInterface;
 use Phluxor\Remote\Endpoint;
-use Phluxor\Remote\Message\EndpointStop;
 use Phluxor\Remote\Remote;
 use Phluxor\Remote\Serializer\SerializerManager;
+use Phluxor\Remote\WebSocket\ProtoBuf\RemotingClient;
+use Phluxor\WebSocket\Client;
 
-readonly class EndpointSupervisor implements ActorInterface, SupervisorStrategyInterface
+class EndpointSupervisor implements ActorInterface, SupervisorStrategyInterface
 {
+    /** @var array<string, RemotingClient> */
+    private array $addresses = [];
+
     public function __construct(
-        private Remote $remote,
-        private SerializerManager $serializerManager,
-        private bool $useWebSocket = false,
+        private readonly Remote $remote,
+        private readonly SerializerManager $serializerManager,
+        private readonly bool $useWebSocket = false,
     ) {
     }
 
@@ -58,11 +62,11 @@ readonly class EndpointSupervisor implements ActorInterface, SupervisorStrategyI
             );
             $context->respond($endpoint);
         }
-        if ($message instanceof EndpointStop) {
-            $context->logger()->debug("EndpointSupervisor stopping children");
-            foreach ($context->children() as $child) {
-                $context->stop($child);
-            }
+        if ($message instanceof ActorSystem\Message\Stopped) {
+            $context->logger()->debug(
+                "EndpointSupervisor stopping EndpointWriter and EndpointWatcher",
+                ['address' => $message]
+            );
         }
     }
 
@@ -103,9 +107,28 @@ readonly class EndpointSupervisor implements ActorInterface, SupervisorStrategyI
         string $address
     ): ActorSystem\Message\ProducerInterface {
         if ($this->useWebSocket) {
-            return new Endpoint\WebSocket\EndpointWriterProducer($remote, $address, $remote->config, $this->serializerManager);
+            return new Endpoint\WebSocket\EndpointWriterProducer(
+                $remote,
+                $this->remoteClient($address, $remote),
+                $address,
+                $remote->config,
+                $this->serializerManager
+            );
         }
         throw new \RuntimeException('now support only WebSocket');
+    }
+
+    private function remoteClient(string $address, Remote $remote): RemotingClient
+    {
+        if (isset($this->addresses[$address])) {
+            return $this->addresses[$address];
+        }
+        [$host, $port] = explode(':', $address);
+        $client = new RemotingClient(
+            (new Client($host, (int)$port, $remote->config->isSsl()))->connect()
+        );
+        $this->addresses[$address] = $client;
+        return $client;
     }
 
     private function spawnEndpointWatcher(
