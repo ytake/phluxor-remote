@@ -12,7 +12,7 @@ use PHPUnit\Framework\TestCase;
 use function Swoole\Coroutine\go;
 use function Swoole\Coroutine\run;
 
-class SerializerTest extends TestCase
+class SerializeManagerTest extends TestCase
 {
     public function testProtobufSerializerSerializePID(): void
     {

@@ -128,7 +128,6 @@ class EndpointWriter implements ActorInterface
             "WebSocket.EndpointWriter closing connection",
             ["address" => $this->address()]
         );
-        // $this->clientClose->push(true);
     }
 
     /**
@@ -206,12 +205,12 @@ class EndpointWriter implements ActorInterface
             }
             $serializedResult = $serialized->typeNameResult;
             $lookupResult = $this->addToLookup($typeNames, $serializedResult->name, $typeNamesArr);
-            $typeNamesArr = array_merge($typeNamesArr, $lookupResult['lookup']);
+            $typeNamesArr = $lookupResult['lookup'];
             $targetLookupResult = $this->addToTargetLookup($targetNames, $rd->target->protobufPid(), $targetNamesArr);
-            $targetNamesArr = array_merge($targetNamesArr, $targetLookupResult['lookup']);
+            $targetNamesArr = $targetLookupResult['lookup'];
             $targetRequestId = $rd->target->protobufPid()->getRequestId();
             $senderLookupResult = $this->addToSenderLookup($senderNames, $rd->sender?->protobufPid(), $senderNamesArr);
-            $senderNamesArr = array_merge($senderNamesArr, $senderLookupResult['lookup']);
+            $senderNamesArr = $senderLookupResult['lookup'];
             $senderRequestId = $rd->sender !== null ? $rd->sender->protobufPid()->getRequestId() : 0;
             $envelopes[] = new MessageEnvelope([
                 'message_header' => $header,
@@ -278,15 +277,6 @@ class EndpointWriter implements ActorInterface
                 }
             }
         }
-        /*
-        $e = $this->errorChannel->pop(0.1);
-        if ($e instanceof \Throwable) {
-            $this->remote->actorSystem->getEventStream()?->publish(
-                new EndpointTerminatedEvent($this->address())
-            );
-            throw $e;
-        }
-        */
         $this->remote->logger()->info(
             "WebSocket.EndpointWriter connected",
             ["address" => $this->address()]
@@ -348,6 +338,11 @@ class EndpointWriter implements ActorInterface
         $this->remote->actorSystem->getEventStream()?->publish($connected);
     }
 
+    /**
+     * TODO move to trait
+     * @param mixed $msg
+     * @return bool
+     */
     private function isDefinedMessage(mixed $msg): bool
     {
         foreach (
@@ -385,9 +380,9 @@ class EndpointWriter implements ActorInterface
      * @param array<string, int> $m
      * @param Pid $pid
      * @param Pid[] $arr
-     * @return array{id: int, map: array<string, int>, pids: Pid[]}
+     * @return array{id: int, lookup: Pid[]}
      */
-    private function extractPids(array $m, Pid $pid, array $arr): array
+    private function addToTargetLookup(array &$m, Pid $pid, array $arr): array
     {
         $max = count($m);
         $key = $pid->getAddress() . "/" . $pid->getId();
@@ -399,20 +394,7 @@ class EndpointWriter implements ActorInterface
             $id = $max;
             $arr[] = $c;
         }
-        return ['id' => $id, 'map' => $m, 'pids' => $arr];
-    }
-
-    /**
-     * @param array<string, int> $m
-     * @param Pid $pid
-     * @param Pid[] $arr
-     * @return array{id: int, lookup: Pid[]}
-     */
-    private function addToTargetLookup(array &$m, Pid $pid, array $arr): array
-    {
-        $r = $this->extractPids($m, $pid, $arr);
-        $m = $r['map'];
-        return ['id' => $r['id'], 'lookup' => $r['pids']];
+        return ['id' => $id, 'lookup' => $arr];
     }
 
     /**
@@ -426,8 +408,16 @@ class EndpointWriter implements ActorInterface
         if ($pid === null) {
             return ['id' => 0, 'lookup' => $arr];
         }
-        $r = $this->extractPids($m, $pid, $arr);
-        $m = $r['map'];
-        return ['id' => $r['id'] + 1, 'lookup' => $r['pids']];
+        $max = count($m);
+        $key = $pid->getAddress() . "/" . $pid->getId();
+        $id = $m[$key] ?? null;
+        if ($id === null) {
+            $c = clone $pid;
+            $c->setRequestId(0);
+            $m[$key] = $max;
+            $id = $max;
+            $arr[] = $c;
+        }
+        return ['id' => $id + 1, 'lookup' => $arr];
     }
 }
