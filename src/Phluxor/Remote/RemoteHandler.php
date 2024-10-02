@@ -23,6 +23,7 @@ namespace Phluxor\Remote;
 use Phluxor\ActorSystem\AddressResolverInterface;
 use Phluxor\ActorSystem\ProcessRegistryResult;
 use Phluxor\ActorSystem\Ref;
+use RuntimeException;
 
 readonly class RemoteHandler implements AddressResolverInterface
 {
@@ -34,7 +35,7 @@ readonly class RemoteHandler implements AddressResolverInterface
     public function __invoke(?Ref $pid): ProcessRegistryResult
     {
         if ($pid === null) {
-            throw new \RuntimeException('Cannot resolve null pid');
+            throw new RuntimeException('Cannot resolve null pid');
         }
         return new ProcessRegistryResult(new RemoteProcess($this->remote), true);
     }
