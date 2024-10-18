@@ -272,7 +272,7 @@ class EndpointWriter implements ActorInterface
                             'error' => $e->getMessage(),
                         ]
                     );
-                    \Swoole\Coroutine::sleep(2);
+                    \Swoole\Coroutine::sleep(1);
                     continue;
                 }
             }
