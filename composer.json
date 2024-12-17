@@ -20,7 +20,7 @@
   "require": {
     "php": "^8.3",
     "ext-swoole": "*",
-    "google/protobuf": "3.25.4",
+    "google/protobuf": "^v3.25.5",
     "phluxor/phluxor": "^0.2.1",
     "phluxor/phluxor-websocket": "^0.2.0"
   },
