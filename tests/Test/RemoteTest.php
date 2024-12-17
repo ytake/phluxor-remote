@@ -21,7 +21,7 @@ class RemoteTest extends TestCase
         run(function () {
             \Swoole\Coroutine\go(function () {
                 $system = ActorSystem::create();
-                $config = new Config('localhost', 50052, Config::withAdvertisedHost('Hi'));
+                $config = new Config('localhost', 50054, Config::withAdvertisedHost('Hi'));
                 $remote = new Remote($system, $config);
                 $remote->start();
                 \Swoole\Coroutine::sleep(0.1);
