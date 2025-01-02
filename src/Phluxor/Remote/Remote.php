@@ -127,7 +127,7 @@ class Remote implements ExtensionInterface
             $this->endpointReader?->suspend(true);
             $this->endpointManager?->stop();
             $c = new Channel(1);
-            $result = $c->pop(10);
+            $result = $c->pop(3);
             if ($result) {
                 $this->logger()->info("Stopped Phluxor server");
             } else {

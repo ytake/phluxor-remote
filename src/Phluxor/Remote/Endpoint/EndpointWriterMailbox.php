@@ -47,7 +47,7 @@ class EndpointWriterMailbox implements MailboxInterface
     private MessageInvokerInterface|null $invoker;
 
     public function __construct(
-        private int $batchSize,
+        private readonly int $batchSize,
         private readonly Queue $userMailbox,
         private readonly MpscQueue $systemMailbox,
     ) {
