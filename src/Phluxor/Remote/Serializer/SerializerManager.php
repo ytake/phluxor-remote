@@ -25,7 +25,6 @@ use Throwable;
 
 class SerializerManager
 {
-
     /** @var SerializerInterface[] */
     private array $serializers = [];
 

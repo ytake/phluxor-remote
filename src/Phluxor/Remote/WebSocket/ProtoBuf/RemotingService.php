@@ -60,34 +60,42 @@ class RemotingService implements RemotingInterface
         WebSocket\ContextInterface $ctx,
         WebSocket\Stream $stream
     ): void {
+        $this->suspend = new Channel(1);
         $disconnectChannel = new \Swoole\Coroutine\Channel(1);
         $edpm = $this->remote->getEndpointManager();
         if ($edpm->getEndpointReaderConnections() === null) {
             throw new \RuntimeException('EndpointReaderConnections not found');
         }
-        if (!isset($ctx[Constant::SERVER_WORKER_CONTEXT])) {
+        $workerContext = $ctx->getValue(Constant::SERVER_WORKER_CONTEXT);
+        if (!$workerContext instanceof ContextInterface) {
             throw new \RuntimeException('Server not found');
         }
         /** @var Server $writer */
-        $writer = $ctx[Constant::SERVER_WORKER_CONTEXT]->getValue(Server::class);
+        $writer = $workerContext->getValue(Server::class);
         $edpm->getEndpointReaderConnections()->set(spl_object_id($writer), $disconnectChannel);
         $rm = new RemoteMessage();
         $rm->setDisconnectRequest(new DisconnectRequest());
         try {
             \Swoole\Coroutine\go(function () use ($disconnectChannel, $writer, $edpm, $ctx, $rm) {
-                if ($disconnectChannel->pop()) {
+                $result = $disconnectChannel->pop(5);
+                if ($result) {
                     $this->remote->logger()->debug("RemotingService is telling to remote that it's leaving");
                     $writer->push(new Message($ctx, $rm));
-                } else {
-                    $edpm->getEndpointReaderConnections()->delete(spl_object_id($writer));
-                    $this->remote->logger()->debug("RemotingService removed active endpoint from endpointManager");
+                }
+                $edpm->getEndpointReaderConnections()->delete(spl_object_id($writer));
+            });
+            $suspended = false;
+            \Swoole\Coroutine\go(function () use ($stream, &$suspended) {
+                while (!$suspended) {
+                    $result = $this->suspend->pop(1);
+                    if ($result) {
+                        $suspended = true;
+                        $stream->close();
+                        break;
+                    }
                 }
             });
-            while (true) {
-                if ($this->suspend->pop(0.001)) {
-                    $stream->close();
-                    break;
-                }
+            while (true) { // @phpstan-ignore while.alwaysTrue
                 $message = $stream->recv();
                 if (!$message instanceof RemoteMessage) {
                     continue;
@@ -128,7 +136,7 @@ class RemotingService implements RemotingInterface
                         $this->remote->logger()->notice("RemotingService received unknown message type");
                 }
             }
-        } catch (WebSocket\Exception\ConnectionClosedException $e) {
+        } catch (WebSocket\Exception\ConnectionClosedException|WebSocket\Exception\WebSocketException $e) {
             $this->remote->logger()->info('RemotingService WebSocket connection closed');
         } finally {
             $disconnectChannel->close();
@@ -239,7 +247,7 @@ class RemotingService implements RemotingInterface
                     $localEnvelope = new \Phluxor\ActorSystem\Message\MessageEnvelope(
                         new MessageHeader($header), // @phpstan-ignore-line
                         $message,
-                        new Ref($sender),
+                        $sender !== null ? new Ref($sender) : null,
                     );
                     $this->remote->actorSystem->root()->send(new Ref($target), $localEnvelope);
                     break;

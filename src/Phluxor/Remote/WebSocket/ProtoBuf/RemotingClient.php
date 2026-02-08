@@ -26,11 +26,11 @@ class RemotingClient extends WebSocket\BaseStub
      */
     public function Receive(RemoteMessage $request, array $metadata = []): ?RemoteMessage // @phpcs:ignore
     {
+        /** @var ?RemoteMessage */
         return $this->serverRequest(
             '/remote.Remoting/Receive',
             $request,
-            [RemoteMessage::class, 'decode'],
-            $metadata
+            [RemoteMessage::class, 'decode']
         );
     }
 
@@ -46,11 +46,11 @@ class RemotingClient extends WebSocket\BaseStub
         array $metadata = []
     ): ListProcessesResponse // @phpcs:ignore
     {
+        /** @var ListProcessesResponse */
         return $this->serverRequest(
             '/remote.Remoting/ListProcesses',
             $request,
-            ['\Phluxor\Remote\WebSocket\ProtoBuf\ListProcessesResponse', 'decode'],
-            $metadata
+            [ListProcessesResponse::class, 'decode']
         );
     }
 
@@ -66,11 +66,11 @@ class RemotingClient extends WebSocket\BaseStub
         array $metadata = []
     ): GetProcessDiagnosticsResponse // @phpcs:ignore
     {
+        /** @var GetProcessDiagnosticsResponse */
         return $this->serverRequest(
             '/remote.Remoting/GetProcessDiagnostics',
             $request,
-            ['\Phluxor\Remote\WebSocket\ProtoBuf\GetProcessDiagnosticsResponse', 'decode'],
-            $metadata
+            [GetProcessDiagnosticsResponse::class, 'decode']
         );
     }
 }

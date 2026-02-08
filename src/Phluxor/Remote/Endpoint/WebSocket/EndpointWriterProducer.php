@@ -10,12 +10,12 @@ use Phluxor\Remote\Config;
 use Phluxor\Remote\Remote;
 use Phluxor\Remote\Serializer\SerializerManager;
 use Phluxor\Remote\WebSocket\ProtoBuf\RemotingClient;
+use Phluxor\WebSocket\Client;
 
 readonly class EndpointWriterProducer implements ProducerInterface
 {
     public function __construct(
         private Remote $remote,
-        private RemotingClient $client,
         private string $address,
         private Config $config,
         private SerializerManager $serializerManager
@@ -24,9 +24,13 @@ readonly class EndpointWriterProducer implements ProducerInterface
 
     public function __invoke(): ActorInterface
     {
+        [$host, $port] = explode(':', $this->address);
+        $client = new RemotingClient(
+            (new Client($host, (int) $port, $this->remote->config->isSsl()))->connect()
+        );
         return new EndpointWriter(
             $this->config,
-            $this->client,
+            $client,
             $this->address,
             $this->remote,
             $this->serializerManager
