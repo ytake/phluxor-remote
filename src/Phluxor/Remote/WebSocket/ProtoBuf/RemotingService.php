@@ -84,15 +84,9 @@ class RemotingService implements RemotingInterface
                 }
                 $edpm->getEndpointReaderConnections()->delete(spl_object_id($writer));
             });
-            $suspended = false;
-            \Swoole\Coroutine\go(function () use ($stream, &$suspended) {
-                while (!$suspended) {
-                    $result = $this->suspend->pop(1);
-                    if ($result) {
-                        $suspended = true;
-                        $stream->close();
-                        break;
-                    }
+            \Swoole\Coroutine\go(function () use ($stream) {
+                if ($this->suspend->pop()) {
+                    $stream->close();
                 }
             });
             while (true) { // @phpstan-ignore while.alwaysTrue
