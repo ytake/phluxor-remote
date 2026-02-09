@@ -63,7 +63,6 @@ class RemotingService implements RemotingInterface
     ): void {
         $suspend = new Channel(1);
         $suspendKey = spl_object_id($stream);
-        $this->suspendChannels->set($suspendKey, $suspend);
         $disconnectChannel = new \Swoole\Coroutine\Channel(1);
         $edpm = $this->remote->getEndpointManager();
         if ($edpm->getEndpointReaderConnections() === null) {
@@ -78,6 +77,7 @@ class RemotingService implements RemotingInterface
         $edpm->getEndpointReaderConnections()->set(spl_object_id($writer), $disconnectChannel);
         $rm = new RemoteMessage();
         $rm->setDisconnectRequest(new DisconnectRequest());
+        $this->suspendChannels->set($suspendKey, $suspend);
         try {
             \Swoole\Coroutine\go(function () use ($disconnectChannel, $writer, $edpm, $ctx, $rm) {
                 $result = $disconnectChannel->pop();
