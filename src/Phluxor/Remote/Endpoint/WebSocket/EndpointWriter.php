@@ -51,6 +51,7 @@ class EndpointWriter implements ActorInterface
 {
     private Channel $errorChannel;
     private Channel $clientClose;
+    private bool $stopping = false;
 
     public function __construct(
         private readonly Config $config,
@@ -124,14 +125,18 @@ class EndpointWriter implements ActorInterface
 
     private function closeClientConn(): void
     {
+        $this->stopping = true;
         $this->remote->logger()->info(
             "WebSocket.EndpointWriter closing connection",
             ["address" => $this->address()]
         );
+        $this->client->close();
+        $this->errorChannel->close();
+        $this->clientClose->close();
     }
 
     /**
-     * @param array $message
+     * @param list<RemoteDeliver|EndpointTerminatedEvent> $message
      * @param ContextInterface $context
      * @return void
      * @throws Exception
@@ -159,15 +164,18 @@ class EndpointWriter implements ActorInterface
                 $context->stop($context->self());
                 return;
             }
-            $rd = $tmp instanceof RemoteDeliver ? $tmp : null;
-            if ($rd?->header === null || $rd->header->length() === 0) {
+            if (!$tmp instanceof RemoteDeliver) {
+                continue;
+            }
+            $rd = $tmp;
+            if ($rd->header === null || $rd->header->length() === 0) {
                 $header = null;
             } else {
                 $header = new MessageHeader([
                     'header_data' => $rd->header->toMap()
                 ]);
             }
-            $message = $rd?->message;
+            $message = $rd->message;
             if ($message instanceof RootSerializableInterface) {
                 try {
                     $message = $message->serialize();
@@ -185,13 +193,6 @@ class EndpointWriter implements ActorInterface
                 $this->remote->logger()->error("EndpointWriter failed to serialize message", [
                     'address' => $this->address(),
                     'error' => $serialized->exception,
-                    'message' => $message
-                ]);
-                continue;
-            }
-            if ($rd === null) {
-                $this->remote->logger()->error("EndpointWriter failed to send message, no RemoteDeliver", [
-                    'address' => $this->address(),
                     'message' => $message
                 ]);
                 continue;
@@ -244,6 +245,9 @@ class EndpointWriter implements ActorInterface
                     'message' => $message
                 ]
             );
+            $this->stopping = true;
+            $terminated = new EndpointTerminatedEvent($this->address());
+            $this->remote->actorSystem->getEventStream()?->publish($terminated);
             $context->stop($context->self());
         }
     }
@@ -262,25 +266,25 @@ class EndpointWriter implements ActorInterface
         for ($i = 0; $i < $retry; $i++) {
             try {
                 $this->initializeInternal();
-                break;
+                $this->remote->logger()->info(
+                    "WebSocket.EndpointWriter connected",
+                    ["address" => $this->address()]
+                );
+                return;
             } catch (Exception $e) {
-                if ($i === $retry - 1) {
-                    $this->remote->logger()->error(
-                        "WebSocket.EndpointWriter failed to connect after max retry count",
-                        [
-                            "address" => $this->address(),
-                            'error' => $e->getMessage(),
-                        ]
-                    );
-                    \Swoole\Coroutine::sleep(1);
-                    continue;
-                }
+                $this->remote->logger()->error(
+                    "WebSocket.EndpointWriter failed to connect",
+                    [
+                        "address" => $this->address(),
+                        'error' => $e->getMessage(),
+                        'retry' => $i + 1,
+                    ]
+                );
+                \Swoole\Coroutine::sleep(1);
             }
         }
-        $this->remote->logger()->info(
-            "WebSocket.EndpointWriter connected",
-            ["address" => $this->address()]
-        );
+        $terminated = new EndpointTerminatedEvent($this->address());
+        $this->remote->actorSystem->getEventStream()?->publish($terminated);
     }
 
     /**
@@ -302,6 +306,9 @@ class EndpointWriter implements ActorInterface
             return;
         }
         $receive = $this->client->Receive($rm);
+        if ($receive === null) {
+            throw new EndpointWriterInvalidConnectException("No connect response received");
+        }
         switch (true) {
             case $receive->hasConnectResponse():
                 $this->remote->logger()->debug(
@@ -320,6 +327,9 @@ class EndpointWriter implements ActorInterface
         }
         go(function () use ($rm) {
             while (true) {
+                if ($this->stopping) {
+                    break;
+                }
                 if ($this->client->hasConnectionError()) {
                     $this->errorChannel->close();
                     $this->clientClose->close();

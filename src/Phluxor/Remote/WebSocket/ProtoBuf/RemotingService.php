@@ -15,6 +15,7 @@ use Phluxor\ActorSystem\Message\MessageHeader;
 use Phluxor\ActorSystem\ProtoBuf\Pid;
 use Phluxor\ActorSystem\ProtoBuf\Terminated;
 use Phluxor\ActorSystem\Ref;
+use Phluxor\Remote\ConcurrentMap;
 use Phluxor\Remote\Message\RemoteTerminate;
 use Phluxor\Remote\ProtoBuf\ConnectRequest;
 use Phluxor\Remote\ProtoBuf\ConnectResponse;
@@ -39,13 +40,13 @@ use Swoole\Coroutine\Channel;
 
 class RemotingService implements RemotingInterface
 {
-    private Channel $suspend;
+    private ConcurrentMap $suspendChannels;
 
     public function __construct(
         private Remote $remote,
         private SerializerManager $serializerManager
     ) {
-        $this->suspend = new Channel(1);
+        $this->suspendChannels = new ConcurrentMap();
     }
 
     /**
@@ -60,34 +61,38 @@ class RemotingService implements RemotingInterface
         WebSocket\ContextInterface $ctx,
         WebSocket\Stream $stream
     ): void {
+        $suspend = new Channel(1);
+        $suspendKey = spl_object_id($stream);
         $disconnectChannel = new \Swoole\Coroutine\Channel(1);
         $edpm = $this->remote->getEndpointManager();
         if ($edpm->getEndpointReaderConnections() === null) {
             throw new \RuntimeException('EndpointReaderConnections not found');
         }
-        if (!isset($ctx[Constant::SERVER_WORKER_CONTEXT])) {
+        $workerContext = $ctx->getValue(Constant::SERVER_WORKER_CONTEXT);
+        if (!$workerContext instanceof ContextInterface) {
             throw new \RuntimeException('Server not found');
         }
         /** @var Server $writer */
-        $writer = $ctx[Constant::SERVER_WORKER_CONTEXT]->getValue(Server::class);
+        $writer = $workerContext->getValue(Server::class);
         $edpm->getEndpointReaderConnections()->set(spl_object_id($writer), $disconnectChannel);
         $rm = new RemoteMessage();
         $rm->setDisconnectRequest(new DisconnectRequest());
+        $this->suspendChannels->set($suspendKey, $suspend);
         try {
             \Swoole\Coroutine\go(function () use ($disconnectChannel, $writer, $edpm, $ctx, $rm) {
-                if ($disconnectChannel->pop()) {
+                $result = $disconnectChannel->pop();
+                if ($result) {
                     $this->remote->logger()->debug("RemotingService is telling to remote that it's leaving");
                     $writer->push(new Message($ctx, $rm));
-                } else {
-                    $edpm->getEndpointReaderConnections()->delete(spl_object_id($writer));
-                    $this->remote->logger()->debug("RemotingService removed active endpoint from endpointManager");
+                }
+                $edpm->getEndpointReaderConnections()->delete(spl_object_id($writer));
+            });
+            \Swoole\Coroutine\go(function () use ($stream, $suspend) {
+                if ($suspend->pop()) {
+                    $stream->close();
                 }
             });
-            while (true) {
-                if ($this->suspend->pop(0.001)) {
-                    $stream->close();
-                    break;
-                }
+            while (true) { // @phpstan-ignore while.alwaysTrue
                 $message = $stream->recv();
                 if (!$message instanceof RemoteMessage) {
                     continue;
@@ -128,11 +133,12 @@ class RemotingService implements RemotingInterface
                         $this->remote->logger()->notice("RemotingService received unknown message type");
                 }
             }
-        } catch (WebSocket\Exception\ConnectionClosedException $e) {
+        } catch (WebSocket\Exception\ConnectionClosedException|WebSocket\Exception\WebSocketException $e) {
             $this->remote->logger()->info('RemotingService WebSocket connection closed');
         } finally {
             $disconnectChannel->close();
-            $this->suspend->close();
+            $this->suspendChannels->delete($suspendKey);
+            $suspend->close();
         }
     }
 
@@ -239,7 +245,7 @@ class RemotingService implements RemotingInterface
                     $localEnvelope = new \Phluxor\ActorSystem\Message\MessageEnvelope(
                         new MessageHeader($header), // @phpstan-ignore-line
                         $message,
-                        new Ref($sender),
+                        $sender !== null ? new Ref($sender) : null,
                     );
                     $this->remote->actorSystem->root()->send(new Ref($target), $localEnvelope);
                     break;
@@ -374,7 +380,12 @@ class RemotingService implements RemotingInterface
 
     public function suspend(bool $to): void
     {
-        $this->suspend->push($to);
+        $this->suspendChannels->range(function (mixed $key, mixed $channel) use ($to): bool {
+            if ($channel instanceof Channel) {
+                $channel->push($to);
+            }
+            return true;
+        });
     }
 
     private function isSystemMessage(mixed $msg): bool

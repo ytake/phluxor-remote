@@ -49,7 +49,12 @@ class BlockList
 
     public function isBlocked(string $memberID): bool
     {
-        return $this->blockedMembers->contains($memberID);
+        $this->lock->lock();
+        try {
+            return $this->blockedMembers->contains($memberID);
+        } finally {
+            $this->lock->unlock();
+        }
     }
 
     public function len(): int

@@ -29,14 +29,9 @@ use Phluxor\ActorSystem\SupervisorStrategyInterface;
 use Phluxor\Remote\Endpoint;
 use Phluxor\Remote\Remote;
 use Phluxor\Remote\Serializer\SerializerManager;
-use Phluxor\Remote\WebSocket\ProtoBuf\RemotingClient;
-use Phluxor\WebSocket\Client;
 
 class EndpointSupervisor implements ActorInterface, SupervisorStrategyInterface
 {
-    /** @var array<string, RemotingClient> */
-    private array $addresses = [];
-
     public function __construct(
         private readonly Remote $remote,
         private readonly SerializerManager $serializerManager,
@@ -109,26 +104,12 @@ class EndpointSupervisor implements ActorInterface, SupervisorStrategyInterface
         if ($this->useWebSocket) {
             return new Endpoint\WebSocket\EndpointWriterProducer(
                 $remote,
-                $this->remoteClient($address, $remote),
                 $address,
                 $remote->config,
                 $this->serializerManager
             );
         }
         throw new \RuntimeException('now support only WebSocket');
-    }
-
-    private function remoteClient(string $address, Remote $remote): RemotingClient
-    {
-        if (isset($this->addresses[$address])) {
-            return $this->addresses[$address];
-        }
-        [$host, $port] = explode(':', $address);
-        $client = new RemotingClient(
-            (new Client($host, (int)$port, $remote->config->isSsl()))->connect()
-        );
-        $this->addresses[$address] = $client;
-        return $client;
     }
 
     private function spawnEndpointWatcher(

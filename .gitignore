@@ -6,3 +6,15 @@ composer.phar
 .phpcs-cache
 docker
 compose.yaml
+
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md
+.codacy/
+
+.mcp.json
+CLAUDE.md
+AGENTS.md
+Dockerfile
+.serena/
+.pr-watcher/

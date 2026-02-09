@@ -139,6 +139,7 @@ class Remote implements ExtensionInterface
             $this->endpointReader?->suspend(true);
             $this->endpointManager?->stop();
             $this->server?->stop();
+            $this->server = null;
             $this->logger()->info("Killed Phluxor server");
         }
     }

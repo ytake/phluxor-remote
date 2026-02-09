@@ -6,6 +6,7 @@ parameters:
       - tests/
       - src/Phluxor/Remote/ProtoBuf
       - src/Phluxor/Remote/Metadata/ProtoBuf
+      - src/Phluxor/Remote/WebSocket/Metadata/ProtoBuf
   level: max
   treatPhpDocTypesAsCertain: false
   scanDirectories:
