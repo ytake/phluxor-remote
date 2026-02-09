@@ -15,6 +15,7 @@ use Phluxor\ActorSystem\Message\MessageHeader;
 use Phluxor\ActorSystem\ProtoBuf\Pid;
 use Phluxor\ActorSystem\ProtoBuf\Terminated;
 use Phluxor\ActorSystem\Ref;
+use Phluxor\Remote\ConcurrentMap;
 use Phluxor\Remote\Message\RemoteTerminate;
 use Phluxor\Remote\ProtoBuf\ConnectRequest;
 use Phluxor\Remote\ProtoBuf\ConnectResponse;
@@ -39,13 +40,13 @@ use Swoole\Coroutine\Channel;
 
 class RemotingService implements RemotingInterface
 {
-    private Channel $suspend;
+    private ConcurrentMap $suspendChannels;
 
     public function __construct(
         private Remote $remote,
         private SerializerManager $serializerManager
     ) {
-        $this->suspend = new Channel(1);
+        $this->suspendChannels = new ConcurrentMap();
     }
 
     /**
@@ -60,7 +61,9 @@ class RemotingService implements RemotingInterface
         WebSocket\ContextInterface $ctx,
         WebSocket\Stream $stream
     ): void {
-        $this->suspend = new Channel(1);
+        $suspend = new Channel(1);
+        $suspendKey = spl_object_id($stream);
+        $this->suspendChannels->set($suspendKey, $suspend);
         $disconnectChannel = new \Swoole\Coroutine\Channel(1);
         $edpm = $this->remote->getEndpointManager();
         if ($edpm->getEndpointReaderConnections() === null) {
@@ -77,15 +80,15 @@ class RemotingService implements RemotingInterface
         $rm->setDisconnectRequest(new DisconnectRequest());
         try {
             \Swoole\Coroutine\go(function () use ($disconnectChannel, $writer, $edpm, $ctx, $rm) {
-                $result = $disconnectChannel->pop(5);
+                $result = $disconnectChannel->pop();
                 if ($result) {
                     $this->remote->logger()->debug("RemotingService is telling to remote that it's leaving");
                     $writer->push(new Message($ctx, $rm));
                 }
                 $edpm->getEndpointReaderConnections()->delete(spl_object_id($writer));
             });
-            \Swoole\Coroutine\go(function () use ($stream) {
-                if ($this->suspend->pop()) {
+            \Swoole\Coroutine\go(function () use ($stream, $suspend) {
+                if ($suspend->pop()) {
                     $stream->close();
                 }
             });
@@ -134,7 +137,8 @@ class RemotingService implements RemotingInterface
             $this->remote->logger()->info('RemotingService WebSocket connection closed');
         } finally {
             $disconnectChannel->close();
-            $this->suspend->close();
+            $this->suspendChannels->delete($suspendKey);
+            $suspend->close();
         }
     }
 
@@ -376,7 +380,12 @@ class RemotingService implements RemotingInterface
 
     public function suspend(bool $to): void
     {
-        $this->suspend->push($to);
+        $this->suspendChannels->range(function (mixed $key, mixed $channel) use ($to): bool {
+            if ($channel instanceof Channel) {
+                $channel->push($to);
+            }
+            return true;
+        });
     }
 
     private function isSystemMessage(mixed $msg): bool
